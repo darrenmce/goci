@@ -7,7 +7,6 @@ job:
     steps:
       - npm install
       - npm test
-      - which sdf3
       - npm prune --production
   publish:
     repo: darrenmce/jackie
