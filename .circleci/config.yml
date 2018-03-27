@@ -32,4 +32,4 @@ jobs:
             - "/go/pkg"
       - store_artifacts:
           path: coverage.html
-          destination: coverage
+          destination: coverage.html
