@@ -61,7 +61,7 @@ func runner(c *cli.Context) {
 	err = checkout(job.Git.Repo, run.WorkDir, log.StandardLogger())
 	check(err)
 
-	dkr, err := docker.NewDockerLib()
+	dkr, err := docker.NewContainerRunner("1.36")
 	check(err)
 
 	buildStatusCode, err := run.RunBuild(dkr, buildId)
@@ -72,7 +72,7 @@ func runner(c *cli.Context) {
 	}
 }
 
-func (run JobRun) RunBuild (dkr docker.ILib, buildId string) (int, error) {
+func (run JobRun) RunBuild (dkr docker.ContainerRunner, buildId string) (int, error) {
 	exitCode := 0
 	job := run.Job
 

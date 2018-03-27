@@ -12,37 +12,11 @@ import (
 	"path"
 )
 
-type ILib interface {
+type ContainerRunner interface {
 	RunContainer (bc BuildContainer, buildId string) (exitCode int, err error)
 }
 
-type Lib struct {
-	Client *docker.Client
-}
-
-func CreateMounts(volumes []BuildVolume) []mount.Mount {
-	var mounts []mount.Mount
-	for _, vol := range volumes {
-		mounts = append(mounts, mount.Mount{
-			Type:   mount.TypeBind,
-			Source: vol.Source,
-			Target: vol.Target,
-		})
-	}
-	return mounts
-}
-
-func NewDockerLib() (ILib, error) {
-	lib := Lib{}
-	cli, err := docker.NewClientWithOpts(docker.WithVersion("1.36"))
-	if err != nil {
-		return lib, err
-	}
-	lib.Client = cli
-	return lib, nil
-}
-
-func (dkr Lib) RunContainer(buildContainer BuildContainer, command string) (int, error) {
+func (dkr containerRunner) RunContainer(buildContainer BuildContainer, command string) (int, error) {
 	cli := dkr.Client
 	ctx := context.Background()
 
@@ -59,7 +33,7 @@ func (dkr Lib) RunContainer(buildContainer BuildContainer, command string) (int,
 		AttachStderr: true,
 		AttachStdout: true,
 	}, &container.HostConfig{
-		Mounts: CreateMounts(buildContainer.Volumes),
+		Mounts: createMounts(buildContainer.Volumes),
 	}, nil, buildContainer.Name + "_" + path.Base(buildContainer.BuildId))
 
 	if err != nil {
@@ -110,4 +84,30 @@ func (dkr Lib) RunContainer(buildContainer BuildContainer, command string) (int,
 	}
 
 	return status.State.ExitCode, nil
+}
+
+type containerRunner struct {
+	Client *docker.Client
+}
+
+func NewContainerRunner(version string) (ContainerRunner, error) {
+	lib := containerRunner{}
+	cli, err := docker.NewClientWithOpts(docker.WithVersion(version))
+	if err != nil {
+		return lib, err
+	}
+	lib.Client = cli
+	return lib, nil
+}
+
+func createMounts(volumes []BuildVolume) []mount.Mount {
+	var mounts []mount.Mount
+	for _, vol := range volumes {
+		mounts = append(mounts, mount.Mount{
+			Type:   mount.TypeBind,
+			Source: vol.Source,
+			Target: vol.Target,
+		})
+	}
+	return mounts
 }

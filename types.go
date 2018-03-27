@@ -3,7 +3,7 @@ package main
 import "github.com/darrenmce/goci/docker"
 
 type IJobRun interface {
-	RunBuild (lib docker.ILib, buildId string) (int, error)
+	RunBuild (lib docker.ContainerRunner, buildId string) (int, error)
 }
 
 type JobRun struct {
