@@ -10,13 +10,25 @@ jobs:
   tests:
     docker:
       - image: circleci/golang:1.10
+    working_directory: /go/src/github.com/darrenmce/goci
     steps:
       - checkout
+      - restore_cache:
+          keys:
+            - v1-pkg-cache
+      - run:
+          name: Install Packages
+          command: go get -t
       - run:
           name: Run Tests
           command: go test -coverprofile=coverage.out
       - run:
           name: Generate Coverage Report
           command: go tool cover -html=coverage.out -o coverage.html
+
+      - save_cache:
+          key: v1-pkg-cache
+          paths:
+            - "/go/pkg"
       - store_artifacts:
           path: coverage.html

@@ -3,9 +3,9 @@ package main_test
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	. "goci"
+	. "github.com/darrenmce/goci"
 	"github.com/stretchr/testify/mock"
-	"goci/docker"
+	"github.com/darrenmce/goci/docker"
 	"errors"
 )
 

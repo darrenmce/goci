@@ -7,7 +7,7 @@ import (
 	"gopkg.in/urfave/cli.v1"
 	"gopkg.in/yaml.v2"
 	"text/template"
-	"goci/docker"
+	"github.com/darrenmce/goci/docker"
 )
 
 func check(e error) {

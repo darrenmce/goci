@@ -1,6 +1,6 @@
 package main
 
-import "goci/docker"
+import "github.com/darrenmce/goci/docker"
 
 type IJobRun interface {
 	RunBuild (lib docker.ILib, buildId string) (int, error)
