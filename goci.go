@@ -7,6 +7,7 @@ import (
 	"gopkg.in/urfave/cli.v1"
 	"gopkg.in/yaml.v2"
 	"text/template"
+	"goci/docker"
 )
 
 func check(e error) {
@@ -39,11 +40,7 @@ func main() {
 	check(err)
 }
 
-
-
 func runner(c *cli.Context) {
-	failed := false
-
 	instructionFile := c.String("instructions")
 	buildId := c.String("buildId")
 
@@ -64,34 +61,47 @@ func runner(c *cli.Context) {
 	err = checkout(job.Git.Repo, run.WorkDir, log.StandardLogger())
 	check(err)
 
-	docker, err := createDockerClient()
+	dkr, err := docker.NewDockerLib()
 	check(err)
 
-	buildContainer := BuildContainer{
+	buildStatusCode, err := run.RunBuild(dkr, buildId)
+	check(err)
+
+	if buildStatusCode != 0 {
+		log.Error("DOH!")
+	}
+}
+
+func (run JobRun) RunBuild (dkr docker.ILib, buildId string) (int, error) {
+	exitCode := 0
+	job := run.Job
+
+	buildContainer := docker.BuildContainer{
 		Name: job.Name,
 		Image: job.Build.Image,
-		Volumes: []BuildVolume{ {run.WorkDir,"/build"} },
+		Volumes: []docker.BuildVolume{ {run.WorkDir,"/build"} },
 		WorkDir: "/build",
 		BuildId: buildId,
 	}
 
 	for _, step := range job.Build.Steps {
-		status, err := runContainer(docker, buildContainer, step)
-		check(err)
+		statusCode, err := dkr.RunContainer(buildContainer, step)
+
+		if err != nil {
+			return statusCode, err
+		}
 
 		log.WithFields(log.Fields{
-			"status": status,
+			"statusCode": statusCode,
 		}).Info("CONTAINER exited")
 
-		if status != 0 {
-			failed = true
+		if statusCode != 0 {
+			exitCode = statusCode
 			break
 		}
 	}
 
-	if failed {
-		log.Error("DOH!")
-	}
+	return exitCode, nil
 }
 
 func getJobRunTemplate() (*template.Template, error) {

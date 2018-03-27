@@ -1,7 +1,7 @@
-package main
+package docker
 
 import (
-	dkrCli "github.com/docker/docker/client"
+	docker "github.com/docker/docker/client"
 	"context"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types"
@@ -12,7 +12,15 @@ import (
 	"path"
 )
 
-func createMounts(volumes []BuildVolume) []mount.Mount {
+type ILib interface {
+	RunContainer (bc BuildContainer, buildId string) (exitCode int, err error)
+}
+
+type Lib struct {
+	Client *docker.Client
+}
+
+func CreateMounts(volumes []BuildVolume) []mount.Mount {
 	var mounts []mount.Mount
 	for _, vol := range volumes {
 		mounts = append(mounts, mount.Mount{
@@ -24,11 +32,18 @@ func createMounts(volumes []BuildVolume) []mount.Mount {
 	return mounts
 }
 
-func createDockerClient() (*dkrCli.Client, error) {
-	return dkrCli.NewClientWithOpts(dkrCli.WithVersion("1.36"))
+func NewDockerLib() (ILib, error) {
+	lib := Lib{}
+	cli, err := docker.NewClientWithOpts(docker.WithVersion("1.36"))
+	if err != nil {
+		return lib, err
+	}
+	lib.Client = cli
+	return lib, nil
 }
 
-func runContainer(cli *dkrCli.Client, buildContainer BuildContainer, command string) (int, error) {
+func (dkr Lib) RunContainer(buildContainer BuildContainer, command string) (int, error) {
+	cli := dkr.Client
 	ctx := context.Background()
 
 	log.WithFields(log.Fields{
@@ -44,12 +59,17 @@ func runContainer(cli *dkrCli.Client, buildContainer BuildContainer, command str
 		AttachStderr: true,
 		AttachStdout: true,
 	}, &container.HostConfig{
-		Mounts: createMounts(buildContainer.Volumes),
+		Mounts: CreateMounts(buildContainer.Volumes),
 	}, nil, buildContainer.Name + "_" + path.Base(buildContainer.BuildId))
-	check(err)
+
+	if err != nil {
+		return 0, err
+	}
 
 	err = cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{})
-	check(err)
+	if err != nil {
+		return 0, err
+	}
 
 	reader, err := cli.ContainerLogs(ctx, resp.ID, types.ContainerLogsOptions{
 		ShowStdout: true,
@@ -57,7 +77,9 @@ func runContainer(cli *dkrCli.Client, buildContainer BuildContainer, command str
 		Follow:     true,
 		Timestamps: false,
 	})
-	check(err)
+	if err != nil {
+		return 0, err
+	}
 	defer reader.Close()
 
 	scanner := bufio.NewScanner(reader)
@@ -77,11 +99,15 @@ func runContainer(cli *dkrCli.Client, buildContainer BuildContainer, command str
 	}
 
 	status, err := cli.ContainerInspect(ctx, resp.ID)
-	check(err)
+	if err != nil {
+		return 0, err
+	}
 
 
 	err = cli.ContainerRemove(ctx, resp.ID, types.ContainerRemoveOptions{})
-	check(err)
+	if err != nil {
+		return 0, err
+	}
 
 	return status.State.ExitCode, nil
 }

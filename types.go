@@ -1,5 +1,11 @@
 package main
 
+import "goci/docker"
+
+type IJobRun interface {
+	RunBuild (lib docker.ILib, buildId string) (int, error)
+}
+
 type JobRun struct {
 	InstructionFile string
 	BuildId         string
@@ -9,29 +15,21 @@ type JobRun struct {
 
 type Job struct {
 	Name string
-	Git struct {
-		Repo string
-	}
-	Build struct {
-		Image string
-		Steps []string
-	}
-	Publish struct {
-		Repo     string
-		Registry string
-		authRef  string
-	}
+	Git  JobGit
+	Build JobBuild
+	Publish JobPublish
 }
 
-type BuildVolume struct {
-	Source string
-	Target string
+type JobGit struct {
+	Repo string
 }
 
-type BuildContainer struct {
-	Name    string
-	Image   string
-	Volumes []BuildVolume
-	WorkDir string
-	BuildId string
+type JobBuild struct {
+	Image string
+	Steps []string
+}
+type JobPublish struct {
+	Repo     string
+	Registry string
+	AuthRef  string
 }

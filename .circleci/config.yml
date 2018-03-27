@@ -1,0 +1,17 @@
+version: 2
+
+workflows:
+  version: 2
+  test:
+    jobs:
+      - tests
+
+jobs:
+  tests:
+    docker:
+      - image: circleci/golang:1.10
+    steps:
+      - checkout
+      - run:
+          name: Run Tests
+          command: go test
