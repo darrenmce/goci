@@ -8,6 +8,7 @@ import (
 	"gopkg.in/yaml.v2"
 	"text/template"
 	"github.com/darrenmce/goci/docker"
+	"errors"
 )
 
 func check(e error) {
@@ -40,7 +41,7 @@ func main() {
 	check(err)
 }
 
-func runner(c *cli.Context) {
+func runner(c *cli.Context) (error) {
 	instructionFile := c.String("instructions")
 	buildId := c.String("buildId")
 
@@ -61,15 +62,22 @@ func runner(c *cli.Context) {
 	err = checkout(job.Git.Repo, run.WorkDir, log.StandardLogger())
 	check(err)
 
-	dkr, err := docker.NewContainerRunner("1.36")
+	containerRunner, err := docker.NewContainerRunner("1.36")
 	check(err)
 
-	buildStatusCode, err := run.RunBuild(dkr, buildId)
+	buildStatusCode, err := run.RunBuild(containerRunner, buildId)
 	check(err)
 
 	if buildStatusCode != 0 {
 		log.Error("DOH!")
+		return errors.New("build failed")
 	}
+
+	imagePublisher, err := docker.NewImagePublisher("1.36")
+	check(err
+
+
+	return nil
 }
 
 func (run JobRun) RunBuild (dkr docker.ContainerRunner, buildId string) (int, error) {
@@ -102,6 +110,12 @@ func (run JobRun) RunBuild (dkr docker.ContainerRunner, buildId string) (int, er
 	}
 
 	return exitCode, nil
+}
+
+func (run JobRun) RunPublish (publisher docker.ImagePublisher) (error) {
+	image := docker.Image{
+
+	}
 }
 
 func getJobRunTemplate() (*template.Template, error) {

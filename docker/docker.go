@@ -10,10 +10,15 @@ import (
 	"bufio"
 	log "github.com/sirupsen/logrus"
 	"path"
+	"bytes"
 )
 
 type ContainerRunner interface {
 	RunContainer (bc BuildContainer, buildId string) (exitCode int, err error)
+}
+
+type ImagePublisher interface {
+	PublishImage (i Image, ra RepoAuth, tag string) (err error)
 }
 
 func (dkr containerRunner) RunContainer(buildContainer BuildContainer, command string) (int, error) {
@@ -111,3 +116,50 @@ func createMounts(volumes []BuildVolume) []mount.Mount {
 	}
 	return mounts
 }
+
+type imagePublisher struct {
+	Client *docker.Client
+}
+
+
+type Image struct {
+	TarContents []byte
+	Name string
+	Dockerfile string
+}
+
+func (image Image) NewImageFromPath(path string) (Image, error) {
+
+}
+
+type RepoAuth struct {
+
+}
+
+func (ip imagePublisher) PublishImage(image Image, repoAuth RepoAuth, tag string) (error) {
+	cli := ip.Client
+	ctx := context.Background()
+	buildResponse, err := cli.ImageBuild(ctx, nil, types.ImageBuildOptions{
+		Context: bytes.NewReader(image.TarContents),
+		Dockerfile: image.Dockerfile,
+		Target: image.Name,
+		Tags: []string{ tag },
+	})
+	if err != nil {
+		return err
+	}
+	defer buildResponse.Body.Close();
+	return nil
+}
+
+func NewImagePublisher(version string) (ImagePublisher, error) {
+	publisher := imagePublisher{}
+	cli, err := docker.NewClientWithOpts(docker.WithVersion(version))
+	if err != nil {
+		return publisher, err
+	}
+	publisher.Client = cli
+	return publisher, nil
+}
+
+
