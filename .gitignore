@@ -1,3 +1,5 @@
 .idea
 coverage.out
 coverage.html
+
+.goci.yml

@@ -10,7 +10,11 @@ import (
 	"bufio"
 	log "github.com/sirupsen/logrus"
 	"path"
-	"bytes"
+	"github.com/mholt/archiver"
+	"os"
+	"io/ioutil"
+	"encoding/json"
+	"encoding/base64"
 )
 
 type ContainerRunner interface {
@@ -18,7 +22,8 @@ type ContainerRunner interface {
 }
 
 type ImagePublisher interface {
-	PublishImage (i Image, ra RepoAuth, tag string) (err error)
+	BuildImage (i Image, tag string) (imageNameAndTag string, err error)
+	PublishImage (imageNameAndTag string, authConfig types.AuthConfig) (error)
 }
 
 func (dkr containerRunner) RunContainer(buildContainer BuildContainer, command string) (int, error) {
@@ -93,6 +98,7 @@ func (dkr containerRunner) RunContainer(buildContainer BuildContainer, command s
 
 type containerRunner struct {
 	Client *docker.Client
+	Ctx context.Context
 }
 
 func NewContainerRunner(version string) (ContainerRunner, error) {
@@ -102,6 +108,7 @@ func NewContainerRunner(version string) (ContainerRunner, error) {
 		return lib, err
 	}
 	lib.Client = cli
+	lib.Ctx = context.Background()
 	return lib, nil
 }
 
@@ -119,38 +126,100 @@ func createMounts(volumes []BuildVolume) []mount.Mount {
 
 type imagePublisher struct {
 	Client *docker.Client
+	Ctx context.Context
 }
 
 
 type Image struct {
-	TarContents []byte
-	Name string
-	Dockerfile string
+	BuildContextTar string
+	Name            string
 }
 
-func (image Image) NewImageFromPath(path string) (Image, error) {
+func NewImageFromDir(name string, dir string) (Image, error) {
+	res := Image{
+		Name: name,
+	}
 
+	tarPath := path.Join(dir, "context.tar")
+	contents, err := ioutil.ReadDir(dir)
+	if err != nil {
+		return res, err
+	}
+
+	//create a []string of file paths
+	files := make([]string, len(contents))
+	for i, fileInfo := range contents {
+		files[i] = path.Join(dir, fileInfo.Name())
+	}
+
+	//tar all the files in the directory
+	err = archiver.Tar.Make(tarPath, files)
+	if err != nil {
+		return res, err
+	}
+
+	res.BuildContextTar = tarPath
+
+	return res, nil
 }
 
-type RepoAuth struct {
-
+type Registry struct {
+	Uri string
+	AuthConfig types.AuthConfig
 }
 
-func (ip imagePublisher) PublishImage(image Image, repoAuth RepoAuth, tag string) (error) {
+func (ip imagePublisher) BuildImage(image Image, tag string) (imageNameAndTag string, err error) {
 	cli := ip.Client
-	ctx := context.Background()
-	buildResponse, err := cli.ImageBuild(ctx, nil, types.ImageBuildOptions{
-		Context: bytes.NewReader(image.TarContents),
-		Dockerfile: image.Dockerfile,
-		Target: image.Name,
-		Tags: []string{ tag },
+
+	buildContextTarFile, err := os.Open(image.BuildContextTar)
+	if err != nil {
+		return "", err
+	}
+	defer buildContextTarFile.Close()
+
+	imageAndTag := image.Name + ":" + tag
+	buildResponse, err := cli.ImageBuild(ip.Ctx, buildContextTarFile, types.ImageBuildOptions{
+		Tags: []string{imageAndTag},
+	})
+	if err != nil {
+		return "", err
+	}
+
+	defer buildResponse.Body.Close()
+	scanner := bufio.NewScanner(buildResponse.Body)
+
+	for scanner.Scan() {
+		log.Info(scanner.Text())
+	}
+
+	return imageAndTag, nil
+}
+
+func (ip imagePublisher) PublishImage(imageNameAndTag string, authConfig types.AuthConfig) (error) {
+	cli := ip.Client
+
+	encodedJSONAuth, err := json.Marshal(authConfig)
+	if err != nil {
+		return err
+	}
+
+	auth64 := base64.URLEncoding.EncodeToString(encodedJSONAuth)
+
+	response, err := cli.ImagePush(ip.Ctx, imageNameAndTag, types.ImagePushOptions{
+		RegistryAuth: auth64,
 	})
 	if err != nil {
 		return err
 	}
-	defer buildResponse.Body.Close();
+	defer response.Close()
+	scanner := bufio.NewScanner(response)
+
+	for scanner.Scan() {
+		log.Info(scanner.Text())
+	}
 	return nil
 }
+
 
 func NewImagePublisher(version string) (ImagePublisher, error) {
 	publisher := imagePublisher{}
@@ -159,6 +228,7 @@ func NewImagePublisher(version string) (ImagePublisher, error) {
 		return publisher, err
 	}
 	publisher.Client = cli
+	publisher.Ctx = context.Background()
 	return publisher, nil
 }
 

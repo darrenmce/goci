@@ -9,6 +9,8 @@ import (
 	"text/template"
 	"github.com/darrenmce/goci/docker"
 	"errors"
+	"github.com/docker/docker/api/types"
+	"github.com/spf13/viper"
 )
 
 func check(e error) {
@@ -17,7 +19,16 @@ func check(e error) {
 	}
 }
 
+func initConfig() {
+	viper.SetConfigName("goci")
+	viper.SetConfigType("yaml")
+	viper.SetConfigFile(".goci.yml")
+	err := viper.ReadInConfig()
+	check(err)
+}
+
 func main() {
+	initConfig()
 	app := cli.NewApp()
 	app.Name = "GoCI"
 	app.Usage = "run some stuff in docker"
@@ -74,8 +85,10 @@ func runner(c *cli.Context) (error) {
 	}
 
 	imagePublisher, err := docker.NewImagePublisher("1.36")
-	check(err
+	check(err)
 
+	err = run.RunPublish(imagePublisher)
+	check(err)
 
 	return nil
 }
@@ -112,10 +125,31 @@ func (run JobRun) RunBuild (dkr docker.ContainerRunner, buildId string) (int, er
 	return exitCode, nil
 }
 
-func (run JobRun) RunPublish (publisher docker.ImagePublisher) (error) {
-	image := docker.Image{
-
+func NewAuthConfigFromViper(registry string, ref string) types.AuthConfig {
+	return types.AuthConfig{
+		ServerAddress: registry,
+		Username: viper.GetString("registries."+ ref +".username"),
+		Password: viper.GetString("registries."+ ref +".password"),
 	}
+}
+
+func (run JobRun) RunPublish (publisher docker.ImagePublisher) (error) {
+	pub := run.Job.Publish
+	image, err := docker.NewImageFromDir("darrenmce/gocitest", run.WorkDir)
+	if err != nil {
+		return err
+	}
+	imageAndTag, err := publisher.BuildImage(image, "stable")
+	if err != nil {
+		return err
+	}
+
+
+	err = publisher.PublishImage(imageAndTag, NewAuthConfigFromViper(pub.Registry, pub.AuthRef))
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func getJobRunTemplate() (*template.Template, error) {
